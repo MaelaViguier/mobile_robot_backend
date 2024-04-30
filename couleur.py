@@ -85,16 +85,16 @@ plt.axis('off')
 plt.show()
 
 # Afficher le masque
-#plt.figure()
-#plt.imshow(final_mask)
-#plt.title('Masque')
-#plt.axis('off')  # Désactiver les axes
-#plt.show()
+plt.figure()
+plt.imshow(final_mask)
+plt.title('Masque')
+plt.axis('off')  # Désactiver les axes
+plt.show()
 
 # Afficher le résultat du masque
-#plt.figure()
-#plt.imshow(res)
-#plt.title('Résultat du Masque')
-#plt.axis('off')  # Désactiver les axes
-#plt.show()
+plt.figure()
+plt.imshow(res)
+plt.title('Résultat du Masque')
+plt.axis('off')  # Désactiver les axes
+plt.show()
 
