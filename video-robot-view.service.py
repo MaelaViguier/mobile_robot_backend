@@ -6,9 +6,11 @@ import requests
 import json
 from flask_cors import CORS
 
+
 app = Flask(__name__)
-CORS(app)
-socketio = SocketIO(app)
+CORS(app, supports_credentials=True, resources={r'/*': {'origins': '*'}})
+socketio = SocketIO(app, cors_allowed_origins="*")
+
 
 # Define color ranges in HSV
 color_ranges = {
@@ -104,7 +106,10 @@ def get_detections():
     return jsonify(ball_data)
 
 
-
+@socketio.on('request_data')
+def handle_request_data():
+    # Process and get your data
+    emit('ball_data', ball_data, broadcast=True)
 
 if __name__ == "__main__":
-    socketio.run(app, debug=True, allow_unsafe_werkzeug=True,host='0.0.0.0')
+    socketio.run(app, debug=True, allow_unsafe_werkzeug=True, host='0.0.0.0')
