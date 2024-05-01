@@ -16,7 +16,7 @@ color_ranges = {
     'orange': ([5, 50, 50], [15, 255, 255]),
     'jaune': ([20, 100, 100], [30, 255, 255])  # Yellow in French
 }
-
+ball_data = []
 # Function to handle color selection
 def get_colors():
     return {'jaune'}  # Always return 'jaune' color
@@ -45,6 +45,7 @@ def process_frame(frame, valid_colors):
                         "position": (cX, cY)
                     })
                     cv.circle(frame, (cX, cY), 7, (0, 255, 0), -1)
+    print(ball_data)
     return ball_data, frame
 
 # Route to handle video stream processing and WebSocket communication
@@ -81,6 +82,7 @@ def handle_frame_request():
                     jpg = jpg[start:end+2]
                     frame = cv.imdecode(np.frombuffer(jpg, dtype=np.uint8), cv.IMREAD_COLOR)
                     if frame is not None:
+                        global ball_data
                         ball_data, processed_frame = process_frame(frame, valid_colors)
                         # Ensure emit is called within the context of SocketIO
                         socketio.emit('ball_data', json.dumps(ball_data))
@@ -99,12 +101,10 @@ def video_feed():
 
 @app.route('/get_detections', methods=['GET'])
 def get_detections():
-    # Dummy data for demonstration
-    detections = [{'color': 'jaune', 'area': 100, 'position': (100, 100)}]
-    return jsonify(detections)
+    return jsonify(ball_data)
 
 
 
 
 if __name__ == "__main__":
-    socketio.run(app, debug=True, allow_unsafe_werkzeug=True)
+    socketio.run(app, debug=True, allow_unsafe_werkzeug=True,host='0.0.0.0')
