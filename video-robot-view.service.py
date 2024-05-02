@@ -16,18 +16,30 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 color_ranges = {
     'bleu': ([100, 100, 0], [140, 255, 255]),  # Blue in French
     'orange': ([5, 50, 50], [15, 255, 255]),
-    'jaune': ([20, 100, 100], [30, 255, 255])  # Yellow in French
+    'jaune': ([20, 100, 100], [30, 255, 255])
 }
 ball_data = []
+active_colors = ['jaune', 'orange', 'bleu']
 # Function to handle color selection
 def get_colors():
-    return {'jaune'}  # Always return 'jaune' color
+    print(active_colors)
+    return active_colors
+@app.route('/update_active_colors', methods=['POST'])
+def update_active_colors():
+    global color_ranges, active_colors  # Make sure you define active_colors at the global scope
+    print(active_colors)
+    data = request.json
+    if 'colors' in data:
+        # Filter color_ranges to include only those colors that are sent from the frontend
+        active_colors = {color: color_ranges[color] for color in data['colors'] if color in color_ranges}
+        return jsonify({"status": "Active colors updated successfully", "activeColors": list(active_colors.keys())}), 200
+    return jsonify({"error": "Invalid request"}), 400
 
 # Function to process frame and emit ball data via WebSocket
-def process_frame(frame, valid_colors):
+def process_frame(frame):
     hsv = cv.cvtColor(frame, cv.COLOR_BGR2HSV)
     ball_data = []
-    for color in valid_colors:
+    for color in get_colors():
         lower, upper = [np.array(x) for x in color_ranges[color]]
         mask = cv.inRange(hsv, lower, upper)
         # Apply morphological operations to clean the mask
@@ -36,7 +48,11 @@ def process_frame(frame, valid_colors):
         contours, _ = cv.findContours(mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
         for contour in contours:
             area = cv.contourArea(contour)
-            if area > 100:
+            perimeter = cv.arcLength(contour, True)
+            if perimeter == 0:
+                continue  # Prevent division by zero
+            roundness = (4 * np.pi * area) / (perimeter ** 2)
+            if area > 500 and roundness > 0.5:
                 M = cv.moments(contour)
                 if M["m00"] != 0:
                     cX = int(M["m10"] / M["m00"])
@@ -85,7 +101,7 @@ def handle_frame_request():
                     frame = cv.imdecode(np.frombuffer(jpg, dtype=np.uint8), cv.IMREAD_COLOR)
                     if frame is not None:
                         global ball_data
-                        ball_data, processed_frame = process_frame(frame, valid_colors)
+                        ball_data, processed_frame = process_frame(frame)
                         # Ensure emit is called within the context of SocketIO
                         socketio.emit('ball_data', json.dumps(ball_data))
                         # Stream processed frame to client
