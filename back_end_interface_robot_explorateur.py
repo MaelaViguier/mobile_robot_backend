@@ -3,6 +3,7 @@ from flask import Flask, render_template, Response, request, jsonify
 from flask_socketio import SocketIO, emit
 from flask_cors import CORS
 import requests
+import socket
 #Utils
 import json
 import numpy as np
@@ -13,7 +14,11 @@ from tempfile import mkstemp
 import cv2 as cv
 #Traitement du son :
 import torch
+
 import whisper
+#Lidar
+import matplotlib.pyplot as plt
+
 
 #Utilisation du GPU si possible
 if torch.cuda.is_available():
@@ -38,8 +43,8 @@ color_ranges = {
     'orange': ([5, 50, 50], [15, 255, 255]),
     'jaune': ([20, 100, 100], [30, 255, 255]),
     'blanc': ([0, 0, 120], [160, 240, 255]),
-    'vert clair': ([40, 40, 50], [80, 255, 255]),   # Vert Clair
-    'or foncé': ([20, 150, 50], [40, 255, 150])
+    'vert clair': ([40, 40, 50], [80, 255, 255]),
+    'or': ([0, 0, 64], [178, 156, 255])
 }
 #Initalisation des données de détection
 ball_data = []
@@ -48,16 +53,57 @@ active_colors = []
 #Initialisation des extentions audio compatibles :
 ALLOWED_EXTENSIONS = {'wav', 'mp3', 'ogg'}
 
+#Fonction LIDAR map
+def gen_map_frames():
+    # Connect to the socket server (which sends LIDAR data)
+    host = '192.168.1.187'  # Adjust to your server's IP address
+    port = 12345  # Port on which your server sends LIDAR data
+    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    client_socket.connect((host, port))
+    print('Lidar client connected')
+    fig, ax = plt.subplots(subplot_kw={'projection': 'polar'})
+    line, = ax.plot([], [], 'b.')  # Initial empty plot
+    ax.set_theta_zero_location('N')  # North at the top
+    ax.set_theta_direction(-1)  # Clockwise
+    ax.set_ylim(0, 4000)  # Set the radius limit
+
+    buffer = ''
+    try:
+        while True:
+            data = client_socket.recv(4096).decode('ascii')
+            if not data:
+                break
+            buffer += data
+            while '\n' in buffer:
+                line_data, buffer = buffer.split('\n', 1)
+                if line_data:
+                    scan = json.loads(line_data)
+                    angles = np.radians(np.array([item[1] for item in scan]))
+                    distances = np.array([item[2] for item in scan])
+                    line.set_data(angles, distances)
+                    fig.canvas.draw()
+                    img = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
+                    img = img.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+                    ret, jpeg = cv.imencode('.jpg', img)
+                    yield (b'--frame\r\n'
+                           b'Content-Type: image/jpeg\r\n\r\n' + jpeg.tobytes() + b'\r\n')
+    finally:
+        plt.close(fig)
+        client_socket.close()
+
+
+@app.route('/map_feed')
+def map_feed():
+    return Response(gen_map_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
+
 
 # Fonction qui recupere les couleurs à détecter
 def get_colors():
-    print(active_colors)
     return active_colors
 #Lien de modification des couleurs détectables via requette HTTP
 @app.route('/update_active_colors', methods=['POST'])
 def update_active_colors():
     global color_ranges, active_colors
-    print(active_colors)
     data = request.json
     if 'colors' in data:
         # Filter color_ranges to include only those colors that are sent from the frontend
@@ -93,7 +139,6 @@ def process_frame(frame):
                         "position": (cX, cY)
                     })
                     cv.circle(frame, (cX, cY), 7, (0, 255, 0), -1)
-    print(ball_data)
     return ball_data, frame
 
 # Route to handle video stream processing and WebSocket communication
