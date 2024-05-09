@@ -19,6 +19,8 @@ import whisper
 #Lidar
 import matplotlib.pyplot as plt
 
+#Initialisation de la variable qui indique la bonne connection au robot
+robot_connected = False
 
 #Utilisation du GPU si possible
 if torch.cuda.is_available():
@@ -53,43 +55,55 @@ active_colors = []
 #Initialisation des extentions audio compatibles :
 ALLOWED_EXTENSIONS = {'wav', 'mp3', 'ogg'}
 
+#Status de connexion
+@app.route('/robot_status')
+def robot_status():
+    return jsonify({'connected': robot_connected})
+
 #Fonction LIDAR map
 def gen_map_frames():
-    # Connect to the socket server (which sends LIDAR data)
-    host = '192.168.1.187'  # Adjust to your server's IP address
-    port = 12345  # Port on which your server sends LIDAR data
+    global robot_connected
+    host = '192.168.1.187'  # Robot IP
+    port = 12345  # Robot port
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    client_socket.connect((host, port))
-    print('Lidar client connected')
-    fig, ax = plt.subplots(subplot_kw={'projection': 'polar'})
-    line, = ax.plot([], [], 'b.')  # Initial empty plot
-    ax.set_theta_zero_location('N')  # North at the top
-    ax.set_theta_direction(-1)  # Clockwise
-    ax.set_ylim(0, 4000)  # Set the radius limit
 
-    buffer = ''
     try:
-        while True:
-            data = client_socket.recv(4096).decode('ascii')
-            if not data:
-                break
-            buffer += data
-            while '\n' in buffer:
-                line_data, buffer = buffer.split('\n', 1)
-                if line_data:
-                    scan = json.loads(line_data)
-                    angles = np.radians(np.array([item[1] for item in scan]))
-                    distances = np.array([item[2] for item in scan])
-                    line.set_data(angles, distances)
-                    fig.canvas.draw()
-                    img = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
-                    img = img.reshape(fig.canvas.get_width_height()[::-1] + (3,))
-                    ret, jpeg = cv.imencode('.jpg', img)
-                    yield (b'--frame\r\n'
-                           b'Content-Type: image/jpeg\r\n\r\n' + jpeg.tobytes() + b'\r\n')
-    finally:
-        plt.close(fig)
-        client_socket.close()
+        client_socket.connect((host, port))
+        robot_connected = True  # Set true on successful connection
+        print('Lidar client connected')
+        fig, ax = plt.subplots(subplot_kw={'projection': 'polar'})
+        line, = ax.plot([], [], 'b.')  # Initial empty plot
+        ax.set_theta_zero_location('N')  # North at the top
+        ax.set_theta_direction(-1)  # Clockwise
+        ax.set_ylim(0, 4000)  # Set the radius limit
+
+        buffer = ''
+        try:
+            while True:
+                data = client_socket.recv(4096).decode('ascii')
+                if not data:
+                    break
+                buffer += data
+                while '\n' in buffer:
+                    line_data, buffer = buffer.split('\n', 1)
+                    if line_data:
+                        scan = json.loads(line_data)
+                        angles = np.radians(np.array([item[1] for item in scan]))
+                        distances = np.array([item[2] for item in scan])
+                        line.set_data(angles, distances)
+                        fig.canvas.draw()
+                        img = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
+                        img = img.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+                        ret, jpeg = cv.imencode('.jpg', img)
+                        yield (b'--frame\r\n'
+                               b'Content-Type: image/jpeg\r\n\r\n' + jpeg.tobytes() + b'\r\n')
+        finally:
+            plt.close(fig)
+            client_socket.close()
+            robot_connected = False
+    except Exception as e:
+        print(f"Failed to connect to LIDAR server: {str(e)}")
+        robot_connected = False
 
 
 @app.route('/map_feed')
@@ -146,13 +160,22 @@ def process_frame(frame):
 def index():
     return render_template('index.html')
 
+
 @socketio.on('connect')
 def handle_connect():
     print('Client connected')
+    robot_connected = True
+    # Emit the current status of the robot connection when a new client connects
+    emit('status_update', {'connected': robot_connected})
 
 @socketio.on('disconnect')
 def handle_disconnect():
+    robot_connected = False
     print('Client disconnected')
+@socketio.on('check_status')
+def handle_check_status():
+    emit('status_update', {'connected': robot_connected})
+
 
 # Route to handle video stream processing and WebSocket communication
 @socketio.on('request_frame')
@@ -178,7 +201,8 @@ def handle_frame_request():
                         global ball_data
                         ball_data, processed_frame = process_frame(frame)
                         # Ensure emit is called within the context of SocketIO
-                        socketio.emit('ball_data', json.dumps(ball_data))
+                        if (ball_data!= []): #Si on détecte au moins une balle
+                            socketio.emit('ball_data', json.dumps(ball_data))
                         # Stream processed frame to client
                         ret, jpeg = cv.imencode('.jpg', processed_frame)
                         frame_bytes = jpeg.tobytes()
@@ -204,7 +228,6 @@ def handle_request_data():
 
 
 #Traitement du son (transcription)
-
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
@@ -246,5 +269,22 @@ def after_request(response):
     print("Headers:", response.headers)
     return response
 
+#Fonctions de controle du robot :
+@app.route('/set_direction', methods=['POST'])
+def set_direction():
+    direction = request.json['direction']
+    # Logic to handle direction command to the Raspberry Pi
+    print(f"Direction set to: {direction}")
+    return jsonify(success=True), 200
+
+@socketio.on('send_command')
+def handle_command(data):
+    command = data['command']
+    # Send this command to the Raspberry Pi
+    print(f"Command received: {command}")
+    # You might also want to emit a response back to the frontend
+    emit('command_status', {'status': 'Command executed'})
+
+# main :
 if __name__ == "__main__":
     socketio.run(app, debug=True, allow_unsafe_werkzeug=True, host='0.0.0.0')
