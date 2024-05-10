@@ -183,6 +183,7 @@ def handle_disconnect():
 @socketio.on('request_frame')
 def handle_frame_request():
     valid_colors = get_colors()
+    global robot_connected
     url = "http://obvault.duckdns.org:31000/video_feed"
     stream = requests.get(url, stream=True)
     boundary = b'--frame'
