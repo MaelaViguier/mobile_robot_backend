@@ -19,6 +19,8 @@ import whisper
 #Lidar
 import matplotlib.pyplot as plt
 
+#ip du robot :
+host = host = '192.168.43.122'
 #Initialisation de la variable qui indique la bonne connection au robot
 robot_connected = False
 #Utilisation du GPU si possible
@@ -70,7 +72,7 @@ def set_mode():
 def gen_map_frames():
     global robot_connected
     # Connect to the socket server (which sends LIDAR data)
-    host = '192.168.1.187'  # Adjust to your server's IP address
+    global host   # Adjust to your server's IP address
     port = 12345  # Port on which your server sends LIDAR data
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     client_socket.connect((host, port))
@@ -182,9 +184,10 @@ def handle_disconnect():
 # Route to handle video stream processing and WebSocket communication
 @socketio.on('request_frame')
 def handle_frame_request():
+    global host
     valid_colors = get_colors()
     global robot_connected
-    url = "http://obvault.duckdns.org:31000/video_feed"
+    url = "http://"+host+":31000/video_feed"
     stream = requests.get(url, stream=True)
     boundary = b'--frame'
     buffer = b''
