@@ -21,6 +21,14 @@ import matplotlib.pyplot as plt
 
 # ip du robot :
 host = '192.168.80.122'
+#Modes disponibles :
+modes = [
+    {'label': 'Pilotage Manuel', 'active': True},
+    {'label': 'Suiveur de Balle', 'active': False},
+    {'label': 'Commande Vocale', 'active': False},
+    {'label': 'Cartographie', 'active': False},
+    {'label': 'p', 'active': False}
+]
 
 # Initialisation de la variable qui indique la bonne connection au robot
 robot_connected = False
@@ -63,14 +71,26 @@ def robot_status():
     return jsonify({'connected': robot_connected})
 
 
-# Choix du mode depuis l'interface
-@app.route('/set_mode', methods=['POST'])
-def set_mode():
-    global current_mode
-    mode_data = request.json
-    current_mode = mode_data.get('mode')
-    return jsonify({"status": "Mode updated", "new_mode": current_mode}), 200
+@socketio.on('change_mode')
+def handle_change_mode(data):
+    global modes
+    requested_mode_label = data['label']
 
+    # Set all modes to inactive, then activate the requested mode
+    for mode in modes:
+        mode['active'] = (mode['label'] == requested_mode_label)
+    # Emit the updated list of modes to all clients
+    emit('modes_updated', modes, broadcast=True)
+    print(f"Mode changed to {requested_mode_label}")
+
+@app.route('/current_mode')
+def get_current_mode():
+    print("Asked for current mode")
+    return jsonify(next((mode for mode in modes if mode['active']), None))
+@app.route('/available_modes')
+def get_available_modes():
+    print("Asked for available modes")
+    return jsonify(modes)
 
 # Fonction LIDAR map
 def gen_map_frames():
