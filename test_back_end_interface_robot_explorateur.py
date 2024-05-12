@@ -26,8 +26,7 @@ modes = [
     {'label': 'Pilotage Manuel', 'active': True},
     {'label': 'Suiveur de Balle', 'active': False},
     {'label': 'Commande Vocale', 'active': False},
-    {'label': 'Cartographie', 'active': False},
-    {'label': 'p', 'active': False}
+    {'label': 'Cartographie', 'active': False}
 ]
 
 # Initialisation de la variable qui indique la bonne connection au robot
