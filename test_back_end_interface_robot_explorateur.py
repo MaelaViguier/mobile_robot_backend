@@ -1,29 +1,30 @@
-#backend server
+# backend server
 from flask import Flask, render_template, Response, request, jsonify
 from flask_socketio import SocketIO, emit
 from flask_cors import CORS
 import requests
 import socket
-#Utils
+# Utils
 import json
 import numpy as np
 import os
 from werkzeug.utils import secure_filename
 from tempfile import mkstemp
-#Traitement des images
+# Traitement des images
 import cv2 as cv
-#Traitement du son :
+# Traitement du son :
 import torch
 
 import whisper
-#Lidar
+# Lidar
 import matplotlib.pyplot as plt
 
-#ip du robot :
-host = host = '192.168.43.122'
-#Initialisation de la variable qui indique la bonne connection au robot
+# ip du robot :
+host = '192.168.80.122'
+
+# Initialisation de la variable qui indique la bonne connection au robot
 robot_connected = False
-#Utilisation du GPU si possible
+# Utilisation du GPU si possible
 if torch.cuda.is_available():
     device = torch.device("cuda")
     print("GPU est disponible. Utilisation du GPU...")
@@ -31,14 +32,13 @@ else:
     device = torch.device("cpu")
     print("GPU n'est pas disponible. Retour au CPU...")
 
-#Chargement du model Whisper
+# Chargement du model Whisper
 model = whisper.load_model("medium", device=device)
 
-#Initialisation du serveur
+# Initialisation du serveur
 app = Flask(__name__)
-CORS(app, supports_credentials=True, resources={r'/*': {'origins': '*'}})
+CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 socketio = SocketIO(app, cors_allowed_origins="*")
-
 
 # Definition des dynamiques des couleurs détéctables
 color_ranges = {
@@ -49,18 +49,21 @@ color_ranges = {
     'vert clair': ([40, 40, 50], [80, 255, 255]),
     'or': ([0, 0, 64], [178, 156, 255])
 }
-#Initalisation des données de détection
+# Initalisation des données de détection
 ball_data = []
-#Initialisation des couleurs détectables
+# Initialisation des couleurs détectables
 active_colors = []
-#Initialisation des extentions audio compatibles :
+# Initialisation des extentions audio compatibles :
 ALLOWED_EXTENSIONS = {'wav', 'mp3', 'ogg'}
 
-#Status de connexion
+
+# Status de connexion
 @app.route('/robot_status')
 def robot_status():
     return jsonify({'connected': robot_connected})
-#Choix du mode depuis l'interface
+
+
+# Choix du mode depuis l'interface
 @app.route('/set_mode', methods=['POST'])
 def set_mode():
     global current_mode
@@ -68,11 +71,12 @@ def set_mode():
     current_mode = mode_data.get('mode')
     return jsonify({"status": "Mode updated", "new_mode": current_mode}), 200
 
-#Fonction LIDAR map
+
+# Fonction LIDAR map
 def gen_map_frames():
     global robot_connected
     # Connect to the socket server (which sends LIDAR data)
-    global host   # Adjust to your server's IP address
+    global host  # Adjust to your server's IP address
     port = 12345  # Port on which your server sends LIDAR data
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     client_socket.connect((host, port))
@@ -118,7 +122,9 @@ def map_feed():
 # Fonction qui recupere les couleurs à détecter
 def get_colors():
     return active_colors
-#Lien de modification des couleurs détectables via requette HTTP
+
+
+# Lien de modification des couleurs détectables via requette HTTP
 @app.route('/update_active_colors', methods=['POST'])
 def update_active_colors():
     global color_ranges, active_colors
@@ -126,8 +132,10 @@ def update_active_colors():
     if 'colors' in data:
         # Filter color_ranges to include only those colors that are sent from the frontend
         active_colors = {color: color_ranges[color] for color in data['colors'] if color in color_ranges}
-        return jsonify({"status": "Active colors updated successfully", "activeColors": list(active_colors.keys())}), 200
+        return jsonify(
+            {"status": "Active colors updated successfully", "activeColors": list(active_colors.keys())}), 200
     return jsonify({"error": "Invalid request"}), 400
+
 
 # Fonction pour traiter une image
 def process_frame(frame):
@@ -159,16 +167,19 @@ def process_frame(frame):
                     cv.circle(frame, (cX, cY), 7, (0, 255, 0), -1)
     return ball_data, frame
 
+
 # Route to handle video stream processing and WebSocket communication
 @app.route('/')
 def index():
     return render_template('index.html')
+
 
 @socketio.on('connect')
 def handle_connect():
     print('Client connected')
     # Emit the current status of the robot connection when a new client connects
     emit('status_update', {'connected': robot_connected})
+
 
 @socketio.on('check_status')
 def handle_check_status():
@@ -187,7 +198,7 @@ def handle_frame_request():
     global host
     valid_colors = get_colors()
     global robot_connected
-    url = "http://"+host+":31000/video_feed"
+    url = "http://" + host + ":31000/video_feed"
     stream = requests.get(url, stream=True)
     boundary = b'--frame'
     buffer = b''
@@ -201,7 +212,7 @@ def handle_frame_request():
                 start = jpg.find(b'\xff\xd8')
                 end = jpg.find(b'\xff\xd9')
                 if start != -1 and end != -1:
-                    jpg = jpg[start:end+2]
+                    jpg = jpg[start:end + 2]
                     frame = cv.imdecode(np.frombuffer(jpg, dtype=np.uint8), cv.IMREAD_COLOR)
                     if frame is not None:
                         global ball_data
@@ -219,9 +230,11 @@ def handle_frame_request():
         print(f"An error occurred: {e}")
         robot_connected = False
 
+
 @app.route('/video_feed')
 def video_feed():
     return Response(handle_frame_request(), content_type='multipart/x-mixed-replace; boundary=frame')
+
 
 @app.route('/get_detections', methods=['GET'])
 def get_detections():
@@ -234,10 +247,11 @@ def handle_request_data():
     emit('ball_data', ball_data, broadcast=True)
 
 
-#Traitement du son (transcription)
+# Traitement du son (transcription)
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
@@ -247,6 +261,7 @@ def upload_file():
             filename = secure_filename(audio_file.filename)
             return "Fichier reçu", 200
     return "Aucun fichier reçu ou type de fichier non autorisé", 400
+
 
 @app.route('/transcribe', methods=['POST'])
 def transcribe_audio():
@@ -272,10 +287,36 @@ def transcribe_audio():
 
     return jsonify({"error": "Aucun fichier reçu"}), 400
 
+
 @app.after_request
 def after_request(response):
     print("Headers:", response.headers)
     return response
 
+
+
+# Define the route for command sending
+
+@app.route('/send_command', methods=['POST'])
+def send_command():
+    try:
+        data = request.json
+        command = data['command']
+        print(command)
+        # URL where the Raspberry Pi Flask server is listening
+        rasp_url = 'http://192.168.80.122:31000/command'  # Update with the correct IP and port
+
+        # Forward the command to the Raspberry Pi
+        response = requests.post(rasp_url, json={'command': command})
+        if response.status_code == 200:
+            return jsonify({"status": "success", "message": "Command forwarded to Raspberry Pi",
+                            "pi_response": response.json()}), 200
+        else:
+            return jsonify(
+                {"status": "error", "message": "Failed to forward command to Raspberry Pi"}), response.status_code
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
 if __name__ == "__main__":
-    socketio.run(app, debug=True, allow_unsafe_werkzeug=True, host='0.0.0.0')
+    socketio.run(app, debug=False, allow_unsafe_werkzeug=True, host='0.0.0.0')
