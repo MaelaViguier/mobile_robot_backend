@@ -10,6 +10,7 @@ import numpy as np
 import os
 from werkzeug.utils import secure_filename
 from tempfile import mkstemp
+import time
 # Traitement des images
 import cv2 as cv
 # Traitement du son :
@@ -19,16 +20,30 @@ import whisper
 # Lidar
 import matplotlib.pyplot as plt
 
+
+# Classe dictionnaire pour la conversion texte commande
+class Dictionnaire:
+    def __init__(self, mots, taille, nom):
+        self.mots = mots
+        self.taille = taille
+        self.nom = nom
+
+
+# Mesure du temps de démarage
+tic = time.time()
 # ip du robot :
 host = '192.168.80.122'
-#Modes disponibles :
+# Modes disponibles :
 modes = [
     {'label': 'Pilotage Manuel', 'active': True},
     {'label': 'Suiveur de Balle', 'active': False},
     {'label': 'Commande Vocale', 'active': False},
     {'label': 'Cartographie', 'active': False}
 ]
-
+# Initialisation de la langue
+language = 'fr'
+# Initalisation du resultat de la transcription
+result = ''
 # Initialisation de la variable qui indique la bonne connection au robot
 robot_connected = False
 # Utilisation du GPU si possible
@@ -62,6 +77,9 @@ ball_data = []
 active_colors = []
 # Initialisation des extentions audio compatibles :
 ALLOWED_EXTENSIONS = {'wav', 'mp3', 'ogg'}
+# Fin mesure temps démarage
+toc = time.time()
+print(toc - tic, 'sec Elapsed')
 
 
 # Status de connexion
@@ -82,14 +100,18 @@ def handle_change_mode(data):
     emit('modes_updated', modes, broadcast=True)
     print(f"Mode changed to {requested_mode_label}")
 
+
 @app.route('/current_mode')
 def get_current_mode():
     print("Asked for current mode")
     return jsonify(next((mode for mode in modes if mode['active']), None))
+
+
 @app.route('/available_modes')
 def get_available_modes():
     print("Asked for available modes")
     return jsonify(modes)
+
 
 # Fonction LIDAR map
 def gen_map_frames():
@@ -151,6 +173,7 @@ def update_active_colors():
     if 'colors' in data:
         # Filter color_ranges to include only those colors that are sent from the frontend
         active_colors = {color: color_ranges[color] for color in data['colors'] if color in color_ranges}
+        mode_suiveur_balle()
         return jsonify(
             {"status": "Active colors updated successfully", "activeColors": list(active_colors.keys())}), 200
     return jsonify({"error": "Invalid request"}), 400
@@ -284,6 +307,8 @@ def upload_file():
 
 @app.route('/transcribe', methods=['POST'])
 def transcribe_audio():
+    global language
+    global result
     try:
         if 'file' in request.files:
             audio_file = request.files['file']
@@ -295,11 +320,16 @@ def transcribe_audio():
                 audio = whisper.load_audio(path)
                 audio = whisper.pad_or_trim(audio)
                 mel = whisper.log_mel_spectrogram(audio).to(model.device)
+                _, probs = model.detect_language(mel)
+                language = {max(probs, key=probs.get)}
+                print(f"Detected language: {language}")
                 options = whisper.DecodingOptions()
                 result = whisper.decode(model, mel, options)
                 return jsonify({"transcription": result.text}), 200
             finally:
                 os.unlink(path)  # Assurez-vous que le fichier est supprimé après utilisation
+                mode_commande_vocale(result.text, language)
+                print('fin de la commande vocale')
     except Exception as e:
         print(f"Erreur lors de la transcription: {e}")
         return jsonify({"error": "Erreur interne du serveur"}), 500
@@ -313,7 +343,6 @@ def after_request(response):
     return response
 
 
-
 # Define the route for command sending
 
 @app.route('/send_command', methods=['POST'])
@@ -321,13 +350,14 @@ def send_command():
     try:
         data = request.json
         command = data['command']
-        print(command)
+        print("Commande recue depuis l'interface : " + command)
         # URL where the Raspberry Pi Flask server is listening
-        rasp_url = 'http://192.168.80.122:31000/command'  # Update with the correct IP and port
+        rasp_url = 'http://192.168.80.122:31000/command'
 
         # Forward the command to the Raspberry Pi
         response = requests.post(rasp_url, json={'command': command})
         if response.status_code == 200:
+            print("Commande envoyée au robot : " + command)
             return jsonify({"status": "success", "message": "Command forwarded to Raspberry Pi",
                             "pi_response": response.json()}), 200
         else:
@@ -337,5 +367,100 @@ def send_command():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
+# Comportement des modes
+def send_command_to_raspberry(command):
+    """
+    Sends a specified command to the Raspberry Pi via the chosen communication method.
+
+    Args:
+    command (str): The command to send to the Raspberry Pi.
+    """
+    rasp_url = 'http://192.168.80.122:31000/command'
+    print(f"Sending command: {command}")
+    # Sendthe command to the Raspberry Pi
+    response = requests.post(rasp_url, json={'command': command})
+    if response.status_code == 200:
+        print("Commande envoyée au robot : " + command)
+        return jsonify({"status": "success", "message": "Command forwarded to Raspberry Pi",
+                        "pi_response": response.json()}), 200
+    else:
+        return jsonify(
+            {"status": "error", "message": "Failed to forward command to Raspberry Pi"}), response.status_code
+
+
+# Mode suiveur de balle :
+def mode_suiveur_balle():
+    global active_colors
+    global ball_data
+    old_command = 'S'
+    print("Mode: Suiveur de Balle is active.")
+
+    while modes[1]["active"]:
+        if not active_colors:
+            print("No active colors for tracking.")
+            continue
+
+        if not ball_data:
+            print("No balls detected.")
+            if old_command != 'S':  # If not already stopped, stop the robot
+                send_command_to_raspberry('S')
+                old_command = 'S'
+            continue
+
+        # Ensure there is at least one ball detected and it has 'size' key
+        if ball_data and all('area' in ball for ball in ball_data):
+            closest_ball = max(ball_data, key=lambda b: b['area'])
+            center_x, center_y = 640, 360  # 1280x720 resolution
+            ball_x, ball_y = closest_ball['position']
+
+            command = determine_command_to_center_ball(ball_x, center_x)
+            if command != old_command:
+                send_command_to_raspberry(command)
+                time.sleep(0.1)
+                send_command_to_raspberry('S')
+                time.sleep(0.3)
+                old_command = command
+
+            command = determine_command_to_set_distance_ball(closest_ball['area'])
+            if command != old_command:
+                send_command_to_raspberry(command)
+                time.sleep(0.1)
+                send_command_to_raspberry('S')
+                time.sleep(0.3)
+                old_command = command
+        else:
+            print("Ball data is incomplete or missing size key.")
+            print(ball_data)
+            if old_command != 'S':
+                send_command_to_raspberry('S')
+                old_command = 'S'
+
+
+def determine_command_to_center_ball(ball_x, center_x):
+    command = 'S'  # Default to stop
+    if ball_x < center_x - 350:  # Ball is on the left
+        command = 'L'
+    elif ball_x > center_x + 350:  # Ball is on the right
+        command = 'R'
+
+    print("Determined command : " + command)
+    return command
+
+
+def determine_command_to_set_distance_ball(ball_size, desired_size=3000):
+    command = 'S'  # Default to stop
+    # Adjust distance based on size
+    if ball_size < desired_size - 1000:
+        command = 'F'
+    elif ball_size > desired_size + 1000:
+        command = 'B'
+    print("Determined command : " + command)
+    return command
+
+
+
+
+
+# Main :
 if __name__ == "__main__":
     socketio.run(app, debug=False, allow_unsafe_werkzeug=True, host='0.0.0.0')
