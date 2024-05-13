@@ -123,11 +123,23 @@ def gen_map_frames():
     client_socket.connect((host, port))
     robot_connected = True
     print('Lidar client connected')
+    # Setup the plot
     fig, ax = plt.subplots(subplot_kw={'projection': 'polar'})
     line, = ax.plot([], [], 'b.')  # Initial empty plot
+
+    # Set plot properties
     ax.set_theta_zero_location('N')  # North at the top
     ax.set_theta_direction(-1)  # Clockwise
     ax.set_ylim(0, 4000)  # Set the radius limit
+    ax.set_title("Lidar Scan", va='bottom')  # Set the title of the plot
+
+    # Hide the borders
+    ax.spines['polar'].set_visible(False)  # Hide the outer circle border
+
+    # Optionally hide grid and ticks if desired
+    #ax.grid(False)  # Turn off the grid
+    #ax.set_xticklabels([])  # Hide the angle ticks
+    #ax.set_yticklabels([])  # Hide the radius ticks
 
     buffer = ''
     try:
@@ -394,23 +406,23 @@ def mode_suiveur_balle():
     global ball_data
     old_command = 'S'
     print("Mode: Suiveur de Balle is active.")
-
     while modes[1]["active"]:
         if not active_colors:
             print("No active colors for tracking.")
             continue
 
         if not ball_data:
-            print("No balls detected.")
+            #print("No balls detected.")
             if old_command != 'S':  # If not already stopped, stop the robot
                 send_command_to_raspberry('S')
                 old_command = 'S'
+                time.sleep(0.5)
             continue
 
         # Ensure there is at least one ball detected and it has 'size' key
         if ball_data and all('area' in ball for ball in ball_data):
             closest_ball = max(ball_data, key=lambda b: b['area'])
-            center_x, center_y = 640, 360  # 1280x720 resolution
+            center_x, center_y = 320, 240  # 640x480 resolution
             ball_x, ball_y = closest_ball['position']
 
             command = determine_command_to_center_ball(ball_x, center_x)
@@ -418,7 +430,7 @@ def mode_suiveur_balle():
                 send_command_to_raspberry(command)
                 time.sleep(0.1)
                 send_command_to_raspberry('S')
-                time.sleep(0.3)
+                time.sleep(0.2)
                 old_command = command
 
             command = determine_command_to_set_distance_ball(closest_ball['area'])
@@ -438,12 +450,12 @@ def mode_suiveur_balle():
 
 def determine_command_to_center_ball(ball_x, center_x):
     command = 'S'  # Default to stop
-    if ball_x < center_x - 350:  # Ball is on the left
+    if ball_x < center_x - 110:  # Ball is on the left
         command = 'L'
-    elif ball_x > center_x + 350:  # Ball is on the right
+    elif ball_x > center_x + 110:  # Ball is on the right
         command = 'R'
 
-    print("Determined command : " + command)
+    print("Determined command : " + command + " from ", ball_data)
     return command
 
 
