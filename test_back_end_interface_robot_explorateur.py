@@ -208,7 +208,7 @@ def process_frame(frame):
             if perimeter == 0:
                 continue  # Divison par 0 impossible
             roundness = (4 * np.pi * area) / (perimeter ** 2)
-            if area > 500 and roundness > 0.5:
+            if area > 100 and roundness > 0.3:
                 M = cv.moments(contour)
                 if M["m00"] != 0:
                     cX = int(M["m10"] / M["m00"])
@@ -430,15 +430,16 @@ def mode_suiveur_balle():
                 send_command_to_raspberry(command)
                 time.sleep(0.1)
                 send_command_to_raspberry('S')
-                time.sleep(0.2)
+                time.sleep(0.3)
                 old_command = command
 
             command = determine_command_to_set_distance_ball(closest_ball['area'])
             if command != old_command:
                 send_command_to_raspberry(command)
                 time.sleep(0.1)
+                send_command_to_raspberry('v')
                 send_command_to_raspberry('S')
-                time.sleep(0.3)
+                time.sleep(0.5)
                 old_command = command
         else:
             print("Ball data is incomplete or missing size key.")
@@ -462,6 +463,8 @@ def determine_command_to_center_ball(ball_x, center_x):
 def determine_command_to_set_distance_ball(ball_size, desired_size=3000):
     command = 'S'  # Default to stop
     # Adjust distance based on size
+    if ball_size < 1000:
+        send_command_to_raspberry('M')
     if ball_size < desired_size - 1000:
         command = 'F'
     elif ball_size > desired_size + 1000:
