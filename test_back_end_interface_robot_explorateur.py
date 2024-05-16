@@ -4,6 +4,7 @@ from flask_socketio import SocketIO, emit
 from flask_cors import CORS
 import requests
 import socket
+import threading
 # Utils
 import json
 import numpy as np
@@ -46,7 +47,8 @@ result = ''
 # Initialisation de la variable qui indique la bonne connection au robot
 robot_connected = False
 #initalisations des donées du lidar :
-lidarData =[]
+angles = []
+distances = []
 # Utilisation du GPU si possible
 if torch.cuda.is_available():
     device = torch.device("cuda")
@@ -117,7 +119,7 @@ def get_available_modes():
 # Fonction LIDAR map
 def gen_map_frames():
     global robot_connected
-    global lidarData
+    global angles, distances
     # Connect to the socket server (which sends LIDAR data)
     global host  # Adjust to your server's IP address
     port = 12345  # Port on which your server sends LIDAR data
@@ -158,7 +160,7 @@ def gen_map_frames():
                     distances = np.array([item[2] for item in scan])
                     line.set_data(angles, distances)
                     fig.canvas.draw()
-                    img = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
+                    img = np.frombuffer(fig.canvas.buffer_rgba(), dtype=np.uint8)
                     img = img.reshape(fig.canvas.get_width_height()[::-1] + (3,))
                     ret, jpeg = cv.imencode('.jpg', img)
                     yield (b'--frame\r\n'
@@ -623,14 +625,52 @@ def mode_commande_vocale(phrase, langue):
     mots = liste_mot(phrase)
     verifie_dico_liste(charger_dictionnaires(), mots, langue)
 
-
+# MOde cartographie :
+@app.route('/start_mapping', methods=['POST'])
+def start_mapping():
+    modes[3]["active"] = True  # Activer le mode cartographie
+    cartographie_thread = threading.Thread(target=mode_cartographie)
+    cartographie_thread.start()
+    return jsonify({"status": "mapping started"})
 
 
 def mode_cartographie():
+    global angles, distances
+
     while modes[3]["active"]:
-        print("On est dans le mode cartographie")
+        if angles.size == 0 or distances.size == 0:
+            print("No LIDAR data available yet.")
+            time.sleep(0.1)
+            continue
 
+        # Paramètres de seuil (en millimètres)
+        front_distance_threshold = 300.0  # distance désirée de l'obstacle devant en mm
+        tolerance = 50.0  # tolérance en mm
 
+        # Détection de l'obstacle devant
+        front_angles = (angles > -np.pi / 6) & (angles < np.pi / 6)  # ±30 degrés devant
+        front_distances = distances[front_angles]
+
+        if len(front_distances) > 0 and min(front_distances) < front_distance_threshold:
+            send_command('STOP\n')
+            # Trouver la direction avec l'obstacle le plus éloigné
+            left_angles = (angles > np.pi / 6) & (angles < np.pi / 2)  # 30° à 90° gauche
+            right_angles = (angles < -np.pi / 6) & (angles > -np.pi / 2)  # 30° à 90° droite
+
+            left_distances = distances[left_angles]
+            right_distances = distances[right_angles]
+
+            avg_left_distance = np.mean(left_distances) if len(left_distances) > 0 else 0
+            avg_right_distance = np.mean(right_distances) if len(right_distances) > 0 else 0
+
+            if avg_left_distance > avg_right_distance:
+                send_command('TURN_LEFT\n')
+            else:
+                send_command('TURN_RIGHT\n')
+        else:
+            send_command('MOVE_FORWARD\n')
+
+        time.sleep(0.1)  # Pause pour éviter une boucle trop rapide
 
 # Main :
 if __name__ == "__main__":
