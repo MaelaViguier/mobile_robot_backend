@@ -21,7 +21,7 @@ import whisper
 import matplotlib.pyplot as plt
 
 
-# Classe dictionnaire pour la conversion texte commande
+# Classe dictionnaire pour la conversion  texte commande
 class Dictionnaire:
     def __init__(self, mots, taille, nom):
         self.mots = mots
@@ -40,12 +40,13 @@ modes = [
     {'label': 'Commande Vocale', 'active': False},
     {'label': 'Cartographie', 'active': False}
 ]
-# Initialisation de la langue
-language = 'fr'
+
 # Initalisation du resultat de la transcription
 result = ''
 # Initialisation de la variable qui indique la bonne connection au robot
 robot_connected = False
+#initalisations des donées du lidar :
+lidarData =[]
 # Utilisation du GPU si possible
 if torch.cuda.is_available():
     device = torch.device("cuda")
@@ -116,6 +117,7 @@ def get_available_modes():
 # Fonction LIDAR map
 def gen_map_frames():
     global robot_connected
+    global lidarData
     # Connect to the socket server (which sends LIDAR data)
     global host  # Adjust to your server's IP address
     port = 12345  # Port on which your server sends LIDAR data
@@ -144,10 +146,10 @@ def gen_map_frames():
     buffer = ''
     try:
         while True:
-            data = client_socket.recv(4096).decode('ascii')
-            if not data:
+            lidarData = client_socket.recv(4096).decode('ascii')
+            if not lidarData:
                 break
-            buffer += data
+            buffer += lidarData
             while '\n' in buffer:
                 line_data, buffer = buffer.split('\n', 1)
                 if line_data:
@@ -164,7 +166,7 @@ def gen_map_frames():
     finally:
         plt.close(fig)
         client_socket.close()
-        robot_connected = False
+
 
 
 @app.route('/map_feed')
@@ -223,10 +225,6 @@ def process_frame(frame):
 
 
 # Route to handle video stream processing and WebSocket communication
-@app.route('/')
-def index():
-    return render_template('index.html')
-
 
 @socketio.on('connect')
 def handle_connect():
@@ -316,7 +314,6 @@ def upload_file():
             return "Fichier reçu", 200
     return "Aucun fichier reçu ou type de fichier non autorisé", 400
 
-
 @app.route('/transcribe', methods=['POST'])
 def transcribe_audio():
     global language
@@ -333,15 +330,17 @@ def transcribe_audio():
                 audio = whisper.pad_or_trim(audio)
                 mel = whisper.log_mel_spectrogram(audio).to(model.device)
                 _, probs = model.detect_language(mel)
-                language = {max(probs, key=probs.get)}
+                language = max(probs, key=probs.get)  # Language as a string
                 print(f"Detected language: {language}")
                 options = whisper.DecodingOptions()
                 result = whisper.decode(model, mel, options)
-                return jsonify({"transcription": result.text}), 200
-            finally:
                 os.unlink(path)  # Assurez-vous que le fichier est supprimé après utilisation
                 mode_commande_vocale(result.text, language)
                 print('fin de la commande vocale')
+                return jsonify({"transcription": result.text}), 200
+            finally:
+                if os.path.exists(path):
+                    os.unlink(path)
     except Exception as e:
         print(f"Erreur lors de la transcription: {e}")
         return jsonify({"error": "Erreur interne du serveur"}), 500
@@ -433,11 +432,10 @@ def mode_suiveur_balle():
                 time.sleep(0.3)
                 old_command = command
 
-            command = determine_command_to_set_distance_ball(closest_ball['area'])
+            command = determine_command_to_set_distance_ball(ball_y,center_y)
             if command != old_command:
                 send_command_to_raspberry(command)
                 time.sleep(0.1)
-                send_command_to_raspberry('v')
                 send_command_to_raspberry('S')
                 time.sleep(0.5)
                 old_command = command
@@ -460,19 +458,177 @@ def determine_command_to_center_ball(ball_x, center_x):
     return command
 
 
-def determine_command_to_set_distance_ball(ball_size, desired_size=3000):
+def determine_command_to_set_distance_ball(ball_y, center_y):
     command = 'S'  # Default to stop
-    # Adjust distance based on size
-    if ball_size < 1000:
-        send_command_to_raspberry('M')
-    if ball_size < desired_size - 1000:
+    if ball_y < center_y + 100 :  # Ball is on the top
         command = 'F'
-    elif ball_size > desired_size + 1000:
+    elif ball_y > center_y + 360:  # Ball is on the bottom
         command = 'B'
-    print("Determined command : " + command)
+
+
+    print("Determined command : " + command + " from ", ball_data)
     return command
 
 
+
+# Mode commande vocale
+
+def charger_dictionnaires():
+    filename = "dictionnaires_globaux.json"
+    if os.path.exists(filename):
+        with open(filename, "r") as file:
+            dictionnaires = json.load(file)
+            dictionnaires = [
+                ({"avancer", "avance"}, 2, "AvancerFR"),
+                ({"reculer", "recule"}, 2, "ReculerFR"),
+                ({"gauche"}, 1, "GaucheFR"),
+                ({"droite"}, 1, "DroiteFR"),
+                ({"ne", "n'"}, 2, "NegFR"),
+                ({"forward"}, 1, "FrontEN"),
+                ({"back"}, 1, "BackEN"),
+                ({"left"}, 1, "LeftEN"),
+                ({"right"}, 1, "RightEN"),
+                ({"don't", "do not"}, 2, "NegEN")
+            ]
+            print(dictionnaires)
+        return dictionnaires
+    else:
+        print("File not found.")
+        return None
+
+
+def verifie_dico_liste(liste_dico, liste_de_mot, langue):
+    parcour = []
+    n = 0
+    neg = False
+
+    action_correspond = {
+        "AvancerFR": "F",
+        "ReculerFR": "B",
+        "GaucheFR": "L",
+        "DroiteFR": "R",
+        "FrontEN": "F",
+        "BackEN": "B",
+        "LeftEN": "L",
+        "RightEN": "R"
+    }
+
+    for i, mot in enumerate(liste_de_mot):
+        if i < len(liste_de_mot) - 1:
+            if mot.isdigit() and liste_de_mot[i + 1].isalpha():
+                nombre = int(mot)
+                unite = liste_de_mot[i + 1].lower()
+                if unite == "m":
+                    parcour.pop()
+                    parcour.extend([action] * nombre)
+                elif unite == "cm":
+                    parcour.pop()
+                    parcour.extend([action.lower()] * nombre)
+                continue
+
+        if langue == 'fr':
+            if mot in ["et", "puis"]:
+                neg = False
+            elif dans_le_dico(mot, liste_dico[4]):
+                neg = True
+
+            if not neg:
+                if analyse_obstacle(mot):
+                    parcour.append("O")
+                    n += 1
+                else:
+                    distance = analyse_distance(mot)
+                    if distance > 1:
+                        res = parcour[-1]
+                        parcour.extend([res] * (distance - 1))
+
+                    for dico in liste_dico[:4]:
+                        if dans_le_dico(mot, dico):
+                            action = action_correspond.get(dico.nom, "")
+                            if action:
+                                parcour.append(action)
+                                n += 1
+                            break
+        elif langue == 'fr':
+            if mot in ["and", "then"]:
+                neg = False
+            elif dans_le_dico(mot, liste_dico[9]):
+                neg = True
+
+            if not neg:
+                if analyse_obstacle(mot):
+                    parcour.append("O")
+                    n += 1
+                else:
+                    distance = analyse_distance(mot)
+                    if distance > 1:
+                        res = parcour[-1]
+                        parcour.extend([res] * (distance - 1))
+
+                    for dico in liste_dico[5:]:
+                        if dans_le_dico(mot, dico):
+                            action = action_correspond.get(dico.nom, "")
+                            if action:
+                                parcour.append(action)
+                                n += 1
+                            break
+
+    print("Parcours généré :", parcour)
+    envoie_info(parcour)
+    return parcour
+
+
+
+
+def envoie_info(parcour):
+    for caractere in parcour:
+        if caractere.isupper():
+            duree_envoie = 1
+        elif caractere.islower():
+            duree_envoie = 0.01
+        else:
+            continue
+
+        if caractere != '':
+            print('durée : ', duree_envoie)
+            send_command_to_raspberry(caractere.upper())
+            time.sleep(duree_envoie)
+        send_command_to_raspberry('S')
+        time.sleep(0.1)
+    # On s'arrete à la fin de parcours
+    send_command_to_raspberry('S')
+
+def analyse_obstacle(mot):
+    return mot.lower() == "obstacle"
+
+
+def analyse_distance(mot):
+    if mot.isdigit():
+        return int(mot)
+    return -1
+
+
+def dans_le_dico(mot, dico):
+    return mot in dico.mots
+
+
+def liste_mot(phrase):
+    mots = [mot.lower() for mot in phrase.split()]
+    return mots
+
+
+def mode_commande_vocale(phrase, langue):
+    print("On est dans le mode commande vocale")
+    print("Transcription vocale : ", phrase)
+    mots = liste_mot(phrase)
+    verifie_dico_liste(charger_dictionnaires(), mots, langue)
+
+
+
+
+def mode_cartographie():
+    while modes[3]["active"]:
+        print("On est dans le mode cartographie")
 
 
 
