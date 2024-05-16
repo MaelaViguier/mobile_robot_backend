@@ -140,11 +140,6 @@ def gen_map_frames():
     # Hide the borders
     ax.spines['polar'].set_visible(False)  # Hide the outer circle border
 
-    # Optionally hide grid and ticks if desired
-    #ax.grid(False)  # Turn off the grid
-    #ax.set_xticklabels([])  # Hide the angle ticks
-    #ax.set_yticklabels([])  # Hide the radius ticks
-
     buffer = ''
     try:
         while True:
@@ -161,7 +156,8 @@ def gen_map_frames():
                     line.set_data(angles, distances)
                     fig.canvas.draw()
                     img = np.frombuffer(fig.canvas.buffer_rgba(), dtype=np.uint8)
-                    img = img.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+                    img = img.reshape(fig.canvas.get_width_height()[::-1] + (4,))
+                    img = cv.cvtColor(img, cv.COLOR_RGBA2RGB)  # Convertir l'image de RGBA à RGB
                     ret, jpeg = cv.imencode('.jpg', img)
                     yield (b'--frame\r\n'
                            b'Content-Type: image/jpeg\r\n\r\n' + jpeg.tobytes() + b'\r\n')
@@ -379,28 +375,30 @@ def send_command():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
-
 # Comportement des modes
-def send_command_to_raspberry(command):
+
+def send_command_to_raspberry(command, format_response=False):
     """
     Sends a specified command to the Raspberry Pi via the chosen communication method.
 
     Args:
     command (str): The command to send to the Raspberry Pi.
+    format_response (bool): Whether to format the response using jsonify (default: False).
+
+    Returns:
+    dict or flask.Response: The response from the Raspberry Pi, optionally formatted using jsonify.
     """
     rasp_url = 'http://192.168.80.122:31000/command'
     print(f"Sending command: {command}")
-    # Sendthe command to the Raspberry Pi
+    # Send the command to the Raspberry Pi
     response = requests.post(rasp_url, json={'command': command})
-    if response.status_code == 200:
-        print("Commande envoyée au robot : " + command)
-        return jsonify({"status": "success", "message": "Command forwarded to Raspberry Pi",
-                        "pi_response": response.json()}), 200
+    
+    if format_response:
+        return jsonify({"status": "error", "message": "Failed to forward command to Raspberry Pi"}), response.status_code
+
     else:
-        return jsonify(
-            {"status": "error", "message": "Failed to forward command to Raspberry Pi"}), response.status_code
-
-
+        return response
+        
 # Mode suiveur de balle :
 def mode_suiveur_balle():
     global active_colors
@@ -415,7 +413,7 @@ def mode_suiveur_balle():
         if not ball_data:
             #print("No balls detected.")
             if old_command != 'S':  # If not already stopped, stop the robot
-                send_command_to_raspberry('S')
+                send_command_to_raspberry('S',False)
                 old_command = 'S'
                 time.sleep(0.5)
             continue
@@ -428,43 +426,43 @@ def mode_suiveur_balle():
 
             command = determine_command_to_center_ball(ball_x, center_x)
             if command != old_command:
-                send_command_to_raspberry(command)
+                send_command_to_raspberry(command,True)
+                time.sleep(0.01)
+                send_command_to_raspberry('S',True)
                 time.sleep(0.1)
-                send_command_to_raspberry('S')
-                time.sleep(0.3)
                 old_command = command
 
-            command = determine_command_to_set_distance_ball(ball_y,center_y)
+            command = determine_command_to_set_distance_ball(ball_y,center_y,closest_ball['area'])
             if command != old_command:
-                send_command_to_raspberry(command)
+                send_command_to_raspberry(command,True)
+                time.sleep(0.01)
+                send_command_to_raspberry('S',True)
                 time.sleep(0.1)
-                send_command_to_raspberry('S')
-                time.sleep(0.5)
                 old_command = command
         else:
             print("Ball data is incomplete or missing size key.")
             print(ball_data)
             if old_command != 'S':
-                send_command_to_raspberry('S')
+                send_command_to_raspberry('S',True)
                 old_command = 'S'
 
 
 def determine_command_to_center_ball(ball_x, center_x):
     command = 'S'  # Default to stop
-    if ball_x < center_x - 110:  # Ball is on the left
+    if ball_x < center_x - 120:  # Ball is on the left
         command = 'L'
-    elif ball_x > center_x + 110:  # Ball is on the right
+    elif ball_x > center_x + 120:  # Ball is on the right
         command = 'R'
 
     print("Determined command : " + command + " from ", ball_data)
     return command
 
 
-def determine_command_to_set_distance_ball(ball_y, center_y):
+def determine_command_to_set_distance_ball(ball_y, center_y, ballArea):
     command = 'S'  # Default to stop
-    if ball_y < center_y + 100 :  # Ball is on the top
+    if (ball_y < center_y + 100) | (ballArea < 1000 ):  # Ball is on the top
         command = 'F'
-    elif ball_y > center_y + 360:  # Ball is on the bottom
+    elif (ball_y > center_y + 360) | (ballArea > 4000 ):  # Ball is on the bottom
         command = 'B'
 
 
@@ -476,28 +474,79 @@ def determine_command_to_set_distance_ball(ball_y, center_y):
 # Mode commande vocale
 
 def charger_dictionnaires():
-    filename = "dictionnaires_globaux.json"
-    if os.path.exists(filename):
-        with open(filename, "r") as file:
-            dictionnaires = json.load(file)
-            dictionnaires = [
-                ({"avancer", "avance"}, 2, "AvancerFR"),
-                ({"reculer", "recule"}, 2, "ReculerFR"),
-                ({"gauche"}, 1, "GaucheFR"),
-                ({"droite"}, 1, "DroiteFR"),
-                ({"ne", "n'"}, 2, "NegFR"),
-                ({"forward"}, 1, "FrontEN"),
-                ({"back"}, 1, "BackEN"),
-                ({"left"}, 1, "LeftEN"),
-                ({"right"}, 1, "RightEN"),
-                ({"don't", "do not"}, 2, "NegEN")
-            ]
-            print(dictionnaires)
-        return dictionnaires
-    else:
-        print("File not found.")
-        return None
+    liste_dico = []
 
+    dictionnaires = [
+        ({"avancer", "avance"}, 2, "AvancerFR"),
+        ({"reculer", "recule"}, 2, "ReculerFR"),
+        ({"gauche"}, 1, "GaucheFR"),
+        ({"droite"}, 1, "DroiteFR"),
+        ({"ne", "n'"}, 2, "NegFR"),
+        ({"forward"}, 1, "FrontEN"),
+        ({"back"}, 1, "BackEN"),
+        ({"left"}, 1, "LeftEN"),
+        ({"right"}, 1, "RightEN"),
+        ({"don't", "do not"}, 2, "NegEN")
+    ]
+
+    for mots, taille, nom in dictionnaires:
+        liste_dico.append(Dictionnaire(list(mots), taille, nom))
+
+    noms_dictionnaires = [
+        "AvancerFR", "ReculerFR", "GaucheFR", "DroiteFR", "NegFR",
+        "FrontEN", "BackEN", "LeftEN", "RightEN", "NegEN"
+    ]
+
+    for nom in noms_dictionnaires:
+        filename = f"{nom}.json"
+
+        if os.path.exists(filename):
+            with open(filename, "r") as file:
+                data = json.load(file)
+                mots = data["mots"]
+                taille = data["taille"]
+                liste_dico.append(Dictionnaire(list(mots), taille, nom))
+
+    return liste_dico
+
+
+def envoie_info(parcour):
+    for caractere in parcour:
+        if caractere.isupper():
+            duree_envoie = 1
+        elif caractere.islower():
+            duree_envoie = 0.01
+        else:
+            continue
+
+        if caractere != '':
+            print('durée : ', duree_envoie)
+            send_command_to_raspberry(caractere.upper())
+            time.sleep(duree_envoie)
+        send_command_to_raspberry('S',True)
+        time.sleep(0.1)
+    # On s'arrete à la fin de parcours
+    send_command_to_raspberry('S',True)
+
+def dans_le_dico(mot, dico):
+    return mot in dico.mots
+
+def analyse_obstacle(mot):
+    return mot.lower() == "obstacle"
+
+
+def analyse_distance(mot):
+    if mot.isdigit():
+        return int(mot)
+    return -1
+
+dico_m = ["mètres", "mètres.","mètres,", "mètre", "mètre.", "mètre,", "meters", "meters.","meters,", "meter", "meter.", "meter,"]
+
+def if_so_m(mot) :
+    for i in len(dico_m) :
+        if mot == dico_m(i) :
+            mot = "m"
+    return mot
 
 def verifie_dico_liste(liste_dico, liste_de_mot, langue):
     parcour = []
@@ -520,7 +569,8 @@ def verifie_dico_liste(liste_dico, liste_de_mot, langue):
             if mot.isdigit() and liste_de_mot[i + 1].isalpha():
                 nombre = int(mot)
                 unite = liste_de_mot[i + 1].lower()
-                if unite == "m":
+                unite = if_so_m(unite)
+                if unite == "m" :
                     parcour.pop()
                     parcour.extend([action] * nombre)
                 elif unite == "cm":
@@ -528,7 +578,7 @@ def verifie_dico_liste(liste_dico, liste_de_mot, langue):
                     parcour.extend([action.lower()] * nombre)
                 continue
 
-        if langue == 'fr':
+        if langue == "FR":
             if mot in ["et", "puis"]:
                 neg = False
             elif dans_le_dico(mot, liste_dico[4]):
@@ -551,7 +601,7 @@ def verifie_dico_liste(liste_dico, liste_de_mot, langue):
                                 parcour.append(action)
                                 n += 1
                             break
-        elif langue == 'fr':
+        elif langue == "EN":
             if mot in ["and", "then"]:
                 neg = False
             elif dans_le_dico(mot, liste_dico[9]):
@@ -575,55 +625,36 @@ def verifie_dico_liste(liste_dico, liste_de_mot, langue):
                                 n += 1
                             break
 
-    print("Parcours généré :", parcour)
     envoie_info(parcour)
+    print(f"Parcours généré : {parcour}")
     return parcour
 
 
+def charger_dictionnaires_depuis_fichier(nom_fichier):
+    liste_dico = []
 
+    with open(nom_fichier, "r") as f:
+        json_data = f.read()
+        data = json.loads(json_data)
 
-def envoie_info(parcour):
-    for caractere in parcour:
-        if caractere.isupper():
-            duree_envoie = 1
-        elif caractere.islower():
-            duree_envoie = 0.01
-        else:
-            continue
-
-        if caractere != '':
-            print('durée : ', duree_envoie)
-            send_command_to_raspberry(caractere.upper())
-            time.sleep(duree_envoie)
-        send_command_to_raspberry('S')
-        time.sleep(0.1)
-    # On s'arrete à la fin de parcours
-    send_command_to_raspberry('S')
-
-def analyse_obstacle(mot):
-    return mot.lower() == "obstacle"
-
-
-def analyse_distance(mot):
-    if mot.isdigit():
-        return int(mot)
-    return -1
-
-
-def dans_le_dico(mot, dico):
-    return mot in dico.mots
-
+        for nom_dico, info_dico in data.items():
+            mots = info_dico["mots"]
+            taille = info_dico["taille"]
+            dico = Dictionnaire(mots, taille, nom_dico)
+            liste_dico.append(dico)
+    print(data)
+    return liste_dico
 
 def liste_mot(phrase):
     mots = [mot.lower() for mot in phrase.split()]
     return mots
 
-
 def mode_commande_vocale(phrase, langue):
     print("On est dans le mode commande vocale")
     print("Transcription vocale : ", phrase)
     mots = liste_mot(phrase)
-    verifie_dico_liste(charger_dictionnaires(), mots, langue)
+    print(f"Mots : {mots}")
+    verifie_dico_liste(charger_dictionnaires_depuis_fichier("dictionnaires_globaux.json"), mots, langue.upper())
 
 # MOde cartographie :
 @app.route('/start_mapping', methods=['POST'])
@@ -644,33 +675,67 @@ def mode_cartographie():
             continue
 
         # Paramètres de seuil (en millimètres)
-        front_distance_threshold = 300.0  # distance désirée de l'obstacle devant en mm
+        front_distance_threshold = 500.0  # distance désirée de l'obstacle devant en mm
+        short_reversal_distance = 400.0   # distance de recul court en mm
         tolerance = 50.0  # tolérance en mm
 
         # Détection de l'obstacle devant
-        front_angles = (angles > -np.pi / 6) & (angles < np.pi / 6)  # ±30 degrés devant
+        front_angles = (angles > -np.pi / 4) & (angles < np.pi / 4)  # ±30 degrés devant
         front_distances = distances[front_angles]
 
         if len(front_distances) > 0 and min(front_distances) < front_distance_threshold:
-            send_command_to_raspberry('S')
-            # Trouver la direction avec l'obstacle le plus éloigné
-            left_angles = (angles > np.pi / 6) & (angles < np.pi / 2)  # 30° à 90° gauche
-            right_angles = (angles < -np.pi / 6) & (angles > -np.pi / 2)  # 30° à 90° droite
+            send_command_to_raspberry('S', False)
+            
+            # Si obstacle trop proche, faire un recul court
+            if min(front_distances) < short_reversal_distance:
+                send_command_to_raspberry('B', False)
+                time.sleep(0.5)  # Recul court
+                send_command_to_raspberry('S', False)
+                
+                # Re-calculer les distances après le recul
+                front_angles = (angles > -np.pi / 4) & (angles < np.pi / 4)  # ±30 degrés devant
+                front_distances = distances[front_angles]
 
-            left_distances = distances[left_angles]
-            right_distances = distances[right_angles]
+                # Vérifier s'il y a encore un obstacle après le recul court
+                if len(front_distances) > 0 and min(front_distances) < front_distance_threshold:
+                    # Trouver la direction avec l'obstacle le plus éloigné
+                    left_angles = (angles > np.pi / 6) & (angles < np.pi / 2)  # 30° à 90° gauche
+                    right_angles = (angles < -np.pi / 6) & (angles > -np.pi / 2)  # 30° à 90° droite
 
-            avg_left_distance = np.mean(left_distances) if len(left_distances) > 0 else 0
-            avg_right_distance = np.mean(right_distances) if len(right_distances) > 0 else 0
+                    left_distances = distances[left_angles]
+                    right_distances = distances[right_angles]
 
-            if avg_left_distance > avg_right_distance:
-                send_command_to_raspberry('L')
+                    avg_left_distance = np.mean(left_distances) if len(left_distances) > 0 else 0
+                    avg_right_distance = np.mean(right_distances) if len(right_distances) > 0 else 0
+
+                    if avg_left_distance > avg_right_distance:
+                        send_command_to_raspberry('L', False)
+                    else:
+                        send_command_to_raspberry('R', False)
+                else:
+                    # Pas d'obstacle après le recul court, continuer en avant
+                    send_command_to_raspberry('F', False)
             else:
-                send_command_to_raspberry('R')
+                # Si l'obstacle est détecté mais suffisamment loin pour ne pas reculer
+                left_angles = (angles > np.pi / 6) & (angles < np.pi / 2)  # 30° à 90° gauche
+                right_angles = (angles < -np.pi / 6) & (angles > -np.pi / 2)  # 30° à 90° droite
+
+                left_distances = distances[left_angles]
+                right_distances = distances[right_angles]
+
+                avg_left_distance = np.mean(left_distances) if len(left_distances) > 0 else 0
+                avg_right_distance = np.mean(right_distances) if len(right_distances) > 0 else 0
+
+                if avg_left_distance > avg_right_distance:
+                    send_command_to_raspberry('L', False)
+                else:
+                    send_command_to_raspberry('R', False)
         else:
-            send_command_to_raspberry('F')
+            send_command_to_raspberry('F', False)
 
         time.sleep(0.1)  # Pause pour éviter une boucle trop rapide
+
+
 
 # Main :
 if __name__ == "__main__":

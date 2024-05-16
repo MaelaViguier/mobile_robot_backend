@@ -1,0 +1,40 @@
+FICHIER LOG DU 2024-05-16 A 14:53:15 : 
+
+2024-05-16 14:53:15 : ConversionTextCommande : Choix de la langue : ANGLAIS
+2024-05-16 14:53:15 : ConversionTextCommande : Dico JSON déjà existant, actualisation du Dico JSON
+2024-05-16 14:53:18 : ConversionTextCommande : Choix dans le menu : Affichage du Dico
+2024-05-16 14:53:18 : ConversionTextCommande : Affichage Dico : Affichage de la liste des Dico.
+2024-05-16 14:53:19 : ConversionTextCommande : Affichage Dico : Affichage de : FrontEN
+2024-05-16 14:53:28 : ConversionTextCommande : Choix dans le menu : Ajouter un mot
+2024-05-16 14:53:28 : ConversionTextCommande : Ajouter un mot : Affichage des Dico
+2024-05-16 14:53:36 : ConversionTextCommande : Ajouter un mot : Mot ajouté au Dico : FrontEN
+2024-05-16 14:53:36 : ConversionTextCommande : Ajouter un mot : Affichage des Dico
+2024-05-16 14:53:51 : ConversionTextCommande : Ajouter un mot : Mot ajouté au Dico : FrontEN
+2024-05-16 14:53:51 : ConversionTextCommande : Ajouter un mot : Affichage des Dico
+2024-05-16 14:53:58 : ConversionTextCommande : Ajouter un mot : Mot ajouté au Dico : FrontEN
+2024-05-16 14:53:58 : ConversionTextCommande : Ajouter un mot : Affichage des Dico
+2024-05-16 14:54:17 : ConversionTextCommande : Ajouter un mot : Mot ajouté au Dico : BackEN
+2024-05-16 14:54:17 : ConversionTextCommande : Ajouter un mot : Affichage des Dico
+2024-05-16 14:54:31 : ConversionTextCommande : Ajouter un mot : Mot ajouté au Dico : BackEN
+2024-05-16 14:54:31 : ConversionTextCommande : Ajouter un mot : Affichage des Dico
+2024-05-16 14:54:43 : ConversionTextCommande : Ajouter un mot : Mot ajouté au Dico : BackEN
+2024-05-16 14:54:43 : ConversionTextCommande : Ajouter un mot : Affichage des Dico
+2024-05-16 14:54:48 : ConversionTextCommande : Ajouter un mot : Mot ajouté au Dico : BackEN
+2024-05-16 14:54:48 : ConversionTextCommande : Ajouter un mot : Affichage des Dico
+2024-05-16 14:54:56 : ConversionTextCommande : Ajouter un mot : Mot ajouté au Dico : BackEN
+2024-05-16 14:54:56 : ConversionTextCommande : Ajouter un mot : Affichage des Dico
+2024-05-16 14:55:22 : ConversionTextCommande : Ajouter un mot : Mot ajouté au Dico : LeftEN
+2024-05-16 14:55:22 : ConversionTextCommande : Ajouter un mot : Affichage des Dico
+2024-05-16 14:55:30 : ConversionTextCommande : Ajouter un mot : Mot ajouté au Dico : RightEN
+2024-05-16 14:55:30 : ConversionTextCommande : Ajouter un mot : Affichage des Dico
+2024-05-16 14:55:33 : ConversionTextCommande : Ajouter un mot : Sortie de Ajouter un mot.
+2024-05-16 14:55:34 : ConversionTextCommande : Choix dans le menu : Supprimer un mot
+2024-05-16 14:55:34 : ConversionTextCommande : Supprimer un mot : Affichage des Dico
+2024-05-16 14:55:35 : ConversionTextCommande : Supprimer un mot : Affichage du contenu des Dico.
+2024-05-16 14:55:37 : ConversionTextCommande : Supprimer un mot : Mot "dzqzqdqzdqzqzdqzd" supprimé du dictionnaire FrontEN
+2024-05-16 14:55:37 : ConversionTextCommande : Supprimer un mot : Affichage des Dico
+2024-05-16 14:55:38 : ConversionTextCommande : Supprimer un mot : Affichage du contenu des Dico.
+2024-05-16 14:55:42 : ConversionTextCommande : Supprimer un mot : Mot "dqzdqzdqzdqzdqzd" supprimé du dictionnaire BackEN
+2024-05-16 14:55:42 : ConversionTextCommande : Supprimer un mot : Affichage des Dico
+2024-05-16 14:55:45 : ConversionTextCommande : Supprimer un mot : Sortie de la Suppression de mot
+2024-05-16 14:55:46 : ConversionTextCommande : Choix dans le menu : Sortie du menu

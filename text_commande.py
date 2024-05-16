@@ -287,10 +287,10 @@ def ajouter_mot_dico(liste_dico, langue):
                     dico_selected.taille += 1
                     print(f"Word added to dictionary {dico_selected.nom}")
                     sauvegarder_dictionnaires(liste_dico, "dictionnaires_globaux.json")
-                    ecrir_log(f"ConversionTextCommande : Ajouter un mot : Mot ajouté au Dico : {dico_selectionne.nom}")
+                    ecrir_log(f"ConversionTextCommande : Ajouter un mot : Mot ajouté au Dico : {dico_selected.nom}")
                 else:
                     print(f"The dictionary {dico_selected.nom} is full, cannot add the word.")
-                    ecrir_log(f"ConversionTextCommande : Ajouter un mot : ERREUR Le dictionnaire {dico_selectionne.nom} est plein, impossible d'ajouter le mot.")
+                    ecrir_log(f"ConversionTextCommande : Ajouter un mot : ERREUR Le dictionnaire {dico_selected.nom} est plein, impossible d'ajouter le mot.")
             else:
                 print("Invalid dictionary choice.")
                 ecrir_log("ConversionTextCommande : Ajouter un mot : ERREUR choix du Dico INVALIDE .......")
@@ -362,7 +362,7 @@ def supprimer_mot_dico(liste_dico, langue):
                 dico_selected = dictionnaires_en[choix_dictionnaire - 1]
                 if dico_selected.taille == 0:
                     print(f"The dictionary {dico_selected.nom} is empty, no words to delete.")
-                    ecrir_log(f"ConversionTextCommande : Supprimer un mot : ERREUR Le dictionnaire {dico_selectionne.nom} est vide, aucun mot à supprimer .......")
+                    ecrir_log(f"ConversionTextCommande : Supprimer un mot : ERREUR Le dictionnaire {dico_selected.nom} est vide, aucun mot à supprimer .......")
                     continue
 
                 print(f"Dictionary content {dico_selected.nom} :")
@@ -380,7 +380,7 @@ def supprimer_mot_dico(liste_dico, langue):
                         dico_selected.taille -= 1
                         print(f"Word \"{mot_supprime}\" removed from dictionary {dico_selected.nom}")
                         sauvegarder_dictionnaires(liste_dico, "dictionnaires_globaux.json")
-                        ecrir_log(f"ConversionTextCommande : Supprimer un mot : Mot \"{mot_supprime}\" supprimé du dictionnaire {dico_selectionne.nom}")
+                        ecrir_log(f"ConversionTextCommande : Supprimer un mot : Mot \"{mot_supprime}\" supprimé du dictionnaire {dico_selected.nom}")
                         break
                     else:
                         print("Invalid word choice.")
@@ -591,5 +591,3 @@ if __name__ == "__main__":
         liste_dico = charger_dictionnaires()
         ecrir_log("ConversionTextCommande : Dico JSON manquant, créastion du Dico")
     conversion_text_commande(langue)
-
-
