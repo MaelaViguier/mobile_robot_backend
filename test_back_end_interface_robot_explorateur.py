@@ -652,7 +652,7 @@ def mode_cartographie():
         front_distances = distances[front_angles]
 
         if len(front_distances) > 0 and min(front_distances) < front_distance_threshold:
-            send_command('STOP\n')
+            send_command_to_raspberry('S')
             # Trouver la direction avec l'obstacle le plus éloigné
             left_angles = (angles > np.pi / 6) & (angles < np.pi / 2)  # 30° à 90° gauche
             right_angles = (angles < -np.pi / 6) & (angles > -np.pi / 2)  # 30° à 90° droite
@@ -664,11 +664,11 @@ def mode_cartographie():
             avg_right_distance = np.mean(right_distances) if len(right_distances) > 0 else 0
 
             if avg_left_distance > avg_right_distance:
-                send_command('TURN_LEFT\n')
+                send_command_to_raspberry('L')
             else:
-                send_command('TURN_RIGHT\n')
+                send_command_to_raspberry('R')
         else:
-            send_command('MOVE_FORWARD\n')
+            send_command_to_raspberry('F')
 
         time.sleep(0.1)  # Pause pour éviter une boucle trop rapide
 
