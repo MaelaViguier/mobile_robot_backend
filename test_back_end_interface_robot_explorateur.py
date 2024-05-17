@@ -15,9 +15,9 @@ import time
 # Traitement des images
 import cv2 as cv
 # Traitement du son :
-import torch
-
-import whisper
+import speech_recognition as sr
+from pydub import AudioSegment
+from gtts import gTTS
 # Lidar
 import matplotlib.pyplot as plt
 
@@ -49,16 +49,8 @@ robot_connected = False
 #initalisations des donées du lidar :
 angles = []
 distances = []
-# Utilisation du GPU si possible
-if torch.cuda.is_available():
-    device = torch.device("cuda")
-    print("GPU est disponible. Utilisation du GPU...")
-else:
-    device = torch.device("cpu")
-    print("GPU n'est pas disponible. Retour au CPU...")
 
-# Chargement du model Whisper
-model = whisper.load_model("medium", device=device)
+
 
 # Initialisation du serveur
 app = Flask(__name__)
@@ -297,59 +289,6 @@ def handle_request_data():
     emit('ball_data', ball_data, broadcast=True)
 
 
-# Traitement du son (transcription)
-
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-
-
-@app.route('/upload', methods=['POST'])
-def upload_file():
-    if 'audio' in request.files:
-        audio_file = request.files['audio']
-        if audio_file and allowed_file(audio_file.filename):
-            filename = secure_filename(audio_file.filename)
-            return "Fichier reçu", 200
-    return "Aucun fichier reçu ou type de fichier non autorisé", 400
-
-@app.route('/transcribe', methods=['POST'])
-def transcribe_audio():
-    global language
-    global result
-    try:
-        if 'file' in request.files:
-            audio_file = request.files['file']
-            fd, path = mkstemp()
-            try:
-                with os.fdopen(fd, 'wb') as tmp:
-                    audio_file.save(tmp)
-                # Charger, traiter et transcrire l'audio
-                audio = whisper.load_audio(path)
-                audio = whisper.pad_or_trim(audio)
-                mel = whisper.log_mel_spectrogram(audio).to(model.device)
-                _, probs = model.detect_language(mel)
-                language = max(probs, key=probs.get)  # Language as a string
-                print(f"Detected language: {language}")
-                options = whisper.DecodingOptions()
-                result = whisper.decode(model, mel, options)
-                os.unlink(path)  # Assurez-vous que le fichier est supprimé après utilisation
-                mode_commande_vocale(result.text, language)
-                print('fin de la commande vocale')
-                return jsonify({"transcription": result.text}), 200
-            finally:
-                if os.path.exists(path):
-                    os.unlink(path)
-    except Exception as e:
-        print(f"Erreur lors de la transcription: {e}")
-        return jsonify({"error": "Erreur interne du serveur"}), 500
-
-    return jsonify({"error": "Aucun fichier reçu"}), 400
-
-
-@app.after_request
-def after_request(response):
-    print("Headers:", response.headers)
-    return response
 
 
 # Define the route for command sending
@@ -512,17 +451,21 @@ def charger_dictionnaires():
 
 def envoie_info(parcour):
     for caractere in parcour:
-        if caractere.isupper():
+        if (caractere == "L") | (caractere == "R"):
+            duree_envoie = 0.7
+        elif caractere.isupper()  :
             duree_envoie = 1
         elif caractere.islower():
-            duree_envoie = 0.01
+            duree_envoie = 0.001
         else:
             continue
 
         if caractere != '':
             print('durée : ', duree_envoie)
-            send_command_to_raspberry(caractere.upper())
+            send_command_to_raspberry(caractere.upper(),False)
+            send_command_to_raspberry(caractere.upper(),False)
             time.sleep(duree_envoie)
+            
         send_command_to_raspberry('S',True)
         time.sleep(0.1)
     # On s'arrete à la fin de parcours
@@ -542,11 +485,12 @@ def analyse_distance(mot):
 
 dico_m = ["mètres", "mètres.","mètres,", "mètre", "mètre.", "mètre,", "meters", "meters.","meters,", "meter", "meter.", "meter,"]
 
-def if_so_m(mot) :
-    for i in len(dico_m) :
-        if mot == dico_m(i) :
+def if_so_m(mot):
+    for i in range(len(dico_m)):
+        if mot == dico_m[i]:
             mot = "m"
     return mot
+
 
 def verifie_dico_liste(liste_dico, liste_de_mot, langue):
     parcour = []
@@ -649,12 +593,76 @@ def liste_mot(phrase):
     mots = [mot.lower() for mot in phrase.split()]
     return mots
 
+
 def mode_commande_vocale(phrase, langue):
     print("On est dans le mode commande vocale")
     print("Transcription vocale : ", phrase)
     mots = liste_mot(phrase)
     print(f"Mots : {mots}")
     verifie_dico_liste(charger_dictionnaires_depuis_fichier("dictionnaires_globaux.json"), mots, langue.upper())
+
+
+
+# Traitement du son (transcription)
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+@app.route('/upload', methods=['POST'])
+def upload_file():
+    if 'audio' in request.files:
+        audio_file = request.files['audio']
+        if audio_file and allowed_file(audio_file.filename):
+            filename = secure_filename(audio_file.filename)
+            return "Fichier reçu", 200
+    return "Aucun fichier reçu ou type de fichier non autorisé", 400
+
+
+def recognize_speech_from_audio_file(audio_file_path):
+    r = sr.Recognizer()
+    
+    # Convertir le fichier audio en WAV si nécessaire
+    if not audio_file_path.endswith('.wav'):
+        audio = AudioSegment.from_file(audio_file_path)
+        audio_file_path = audio_file_path.rsplit('.', 1)[0] + '.wav'
+        audio.export(audio_file_path, format='wav')
+    
+    with sr.AudioFile(audio_file_path) as source:
+        audio_data = r.record(source)
+    try:
+        result = r.recognize_google(audio_data, language="fr-FR")
+        print("Vous avez dit : ", result)
+        return result
+    except sr.UnknownValueError:
+        print("Google Speech Recognition n'a pas compris l'audio")
+        return "Google Speech Recognition n'a pas compris l'audio"
+    except sr.RequestError as e:
+        print(f"Erreur de service Google Speech Recognition; {e}")
+        return f"Erreur de service Google Speech Recognition; {e}"
+
+# Fonction de synthèse vocale
+
+@app.route('/transcribe', methods=['POST'])
+def transcribe_audio():
+    if 'file' not in request.files:
+        return jsonify({"status": "error", "message": "No file part"}), 400
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"status": "error", "message": "No selected file"}), 400
+    if file:
+        file_path = os.path.join('/tmp', file.filename)
+        file.save(file_path)
+        transcription = recognize_speech_from_audio_file(file_path)
+        mode_commande_vocale(transcription, "fr")
+        return jsonify({"transcription": transcription}), 200
+
+
+@app.after_request
+def after_request(response):
+    print("Headers:", response.headers)
+    return response
+
 
 # MOde cartographie :
 @app.route('/start_mapping', methods=['POST'])
@@ -689,7 +697,7 @@ def mode_cartographie():
             # Si obstacle trop proche, faire un recul court
             if min(front_distances) < short_reversal_distance:
                 send_command_to_raspberry('B', False)
-                time.sleep(0.5)  # Recul court
+                time.sleep(0.1)  # Recul court
                 send_command_to_raspberry('S', False)
                 
                 # Re-calculer les distances après le recul
