@@ -60,7 +60,7 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 # Definition des dynamiques des couleurs détéctables
 color_ranges = {
     'bleu': ([100, 100, 0], [140, 255, 255]),
-    'orange': ([5, 50, 50], [15, 255, 255]),
+    'orange': ([5, 50, 50], [10, 255, 255]),
     'jaune': ([20, 100, 100], [30, 255, 255]),
     'blanc': ([0, 0, 120], [160, 240, 255]),
     'vert clair': ([40, 40, 50], [80, 255, 255]),
@@ -452,7 +452,7 @@ def charger_dictionnaires():
 def envoie_info(parcour):
     for caractere in parcour:
         if (caractere == "L") | (caractere == "R"):
-            duree_envoie = 0.7
+            duree_envoie = 0.6
         elif caractere.isupper()  :
             duree_envoie = 1
         elif caractere.islower():
@@ -672,12 +672,11 @@ def start_mapping():
     cartographie_thread.start()
     return jsonify({"status": "mapping started"})
 
-
 def mode_cartographie():
     global angles, distances
 
     while modes[3]["active"]:
-        if angles.size == 0 or distances.size == 0:
+        if len(angles) == 0 or len(distances) == 0:
             print("No LIDAR data available yet.")
             time.sleep(0.1)
             continue
@@ -689,7 +688,7 @@ def mode_cartographie():
 
         # Détection de l'obstacle devant
         front_angles = (angles > -np.pi / 4) & (angles < np.pi / 4)  # ±30 degrés devant
-        front_distances = distances[front_angles]
+        front_distances = np.array(distances)[front_angles]
 
         if len(front_distances) > 0 and min(front_distances) < front_distance_threshold:
             send_command_to_raspberry('S', False)
@@ -702,7 +701,7 @@ def mode_cartographie():
                 
                 # Re-calculer les distances après le recul
                 front_angles = (angles > -np.pi / 4) & (angles < np.pi / 4)  # ±30 degrés devant
-                front_distances = distances[front_angles]
+                front_distances = np.array(distances)[front_angles]
 
                 # Vérifier s'il y a encore un obstacle après le recul court
                 if len(front_distances) > 0 and min(front_distances) < front_distance_threshold:
@@ -710,8 +709,8 @@ def mode_cartographie():
                     left_angles = (angles > np.pi / 6) & (angles < np.pi / 2)  # 30° à 90° gauche
                     right_angles = (angles < -np.pi / 6) & (angles > -np.pi / 2)  # 30° à 90° droite
 
-                    left_distances = distances[left_angles]
-                    right_distances = distances[right_angles]
+                    left_distances = np.array(distances)[left_angles]
+                    right_distances = np.array(distances)[right_angles]
 
                     avg_left_distance = np.mean(left_distances) if len(left_distances) > 0 else 0
                     avg_right_distance = np.mean(right_distances) if len(right_distances) > 0 else 0
@@ -728,8 +727,8 @@ def mode_cartographie():
                 left_angles = (angles > np.pi / 6) & (angles < np.pi / 2)  # 30° à 90° gauche
                 right_angles = (angles < -np.pi / 6) & (angles > -np.pi / 2)  # 30° à 90° droite
 
-                left_distances = distances[left_angles]
-                right_distances = distances[right_angles]
+                left_distances = np.array(distances)[left_angles]
+                right_distances = np.array(distances)[right_angles]
 
                 avg_left_distance = np.mean(left_distances) if len(left_distances) > 0 else 0
                 avg_right_distance = np.mean(right_distances) if len(right_distances) > 0 else 0
@@ -742,7 +741,6 @@ def mode_cartographie():
             send_command_to_raspberry('F', False)
 
         time.sleep(0.1)  # Pause pour éviter une boucle trop rapide
-
 
 
 # Main :
