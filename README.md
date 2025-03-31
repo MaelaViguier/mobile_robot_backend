@@ -1,4 +1,4 @@
-# Backend Robot Explorateur - Projet Fil Rouge 1A SRI 2023/2025
+# Backend Robot Explorateur - Projet Fil Rouge 1A SRI 2023/2024
 
 ![Flask](https://img.shields.io/badge/built%20with-flask-red)
 ![Status](https://img.shields.io/badge/status-terminé-green)
