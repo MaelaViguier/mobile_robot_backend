@@ -52,7 +52,7 @@ $ git clone https://github.com/MaelaViguier/mobile_robot_backend.git
 $ cd mobile_robot_backend
 
 # Installer les dépendances
-$ pip install openCV_python
+$ pip install opencv_python
 $ pip install matplotlib
 $ pip install speech_recognition
 $ pip install werkzeug
