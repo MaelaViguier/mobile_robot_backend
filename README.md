@@ -40,7 +40,7 @@ Ce backend a été développé pour servir de lien entre l’interface frontend 
 ## Statut
 
 Projet **terminé** (2024). Utilisé lors de démonstrations pour valider les compétences transverses du projet.
-Ce projet a été utilisé comme plateforme de développement lors du **[HackaTAL 2024](https://hackatal.github.io/2024/)**, un hackathon autour du TAL et des IA génératives appliquées à des cas concrets.
+Ce projet a été utilisé comme plateforme de développement lors du **[HackaTAL 2024](https://hackatal.github.io/2024/)**, un hackathon autour du TAL et des IA génératives appliquées à la conversion audio en commandes.
   
 ---
 
