@@ -52,7 +52,11 @@ $ git clone https://github.com/MaelaViguier/mobile_robot_backend.git
 $ cd mobile_robot_backend
 
 # Installer les dépendances
-$ pip install -r requirements.txt  # fichier à créer si non existant
+$ pip install openCV_python
+$ pip install matplotlib
+$ pip install speech_recognition
+$ pip install werkzeug
+... et toutes les autres
 
 # Lancer le serveur Flask avec WebSocket
 $ python3 back_end_interface_robot_explorateur.py
