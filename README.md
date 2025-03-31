@@ -75,9 +75,6 @@ $ python3 back_end_interface_robot_explorateur.py
   <img src="https://github.com/Bebel19/interface_robot_explorateur/blob/master/src/assets/video/robot_explorateur.gif?raw=true" alt="Robot explorateur GIF" width="800"/>
 </div>
 
-
-
-
 ---
 
 **Projet universitaire ✨** — UPSSITECH Toulouse
