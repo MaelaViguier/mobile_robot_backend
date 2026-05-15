@@ -79,4 +79,4 @@ $ python3 back_end_interface_robot_explorateur.py
 
 ---
 
-**Projet universitaire ✨** — UPSSITECH Toulouse
+**Projet universitaire** — UPSSITECH Toulouse
