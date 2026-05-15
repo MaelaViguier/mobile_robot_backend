@@ -65,3 +65,18 @@ pip install werkzeug
 python3 back_end_interface_robot_explorateur.py
 
 # The backend will be available at http://localhost:5000
+```
+
+
+
+## Demo
+
+<div align="center">
+  <img src="https://github.com/Bebel19/interface_robot_explorateur/blob/master/src/assets/image/20240512_195038.jpg?raw=true" alt="Robot explorateur" width="400"/>
+  <br/>
+  <img src="https://github.com/Bebel19/interface_robot_explorateur/blob/master/src/assets/video/robot_explorateur.gif?raw=true" alt="Robot explorateur GIF" width="800"/>
+</div>
+
+---
+
+**University projet** — UPSSITECH Toulouse
